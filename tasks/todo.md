@@ -33,12 +33,52 @@
   - [x] 冪等（登録済みコマンドを比較し、同一なら何もしない）
   - [x] macOS では launchctl 登録にフォールバック（同一エントリポイント）
 
-## Phase 3 — クラウド認知パイプラインの扱い（別判断）
+## Phase 3 — クラウド認知パイプラインの扱い
 
-- [ ] 朝夕の目（07:00 / 18:30）と週次 Dreaming（日曜 21:30）が**クラウド側に1件も存在しない**問題への対応方針を決める
-  - 案A: ローカル schtasks で `sync-agent-to-vault.sh` 相当を回す
-  - 案B: claude.ai の Scheduled Tasks に登録し直す（リポジトリ変更なし）
-- 判断まで着手しない
+### 前提が誤りだった
+
+「クラウド側にタスクが1件も存在しない」という当初の前提は**誤り**。MCP の `list_scheduled_tasks` が0件を返したのは、タスクが claude.ai 側のアカウントに登録されておりこのセッションから見えないため。vault の git 履歴に `Claude <noreply@anthropic.com>` 名義のコミットが実在する:
+
+- 2026-07-19 `weekly dreaming: 07-19 パターン統合`（前回の日曜、DREAMS.md 更新）
+- 2026-07-22 `daily(2026-07-22) + MEMORY: summarize today's vault activity`
+- 2026-07-23 `auto(vault): 2026-07-23 daily note + MEMORY digest`
+
+よって案A（ローカル再実装）は**採用しない**。稼働中のパイプラインと二重に MEMORY.md / DREAMS.md を書き、vault の所有権モデル（digest層＝クラウドのみ）を壊すため。`sync-agent-to-vault.sh` も前提の `~/agent-data/` が存在せずこの環境では動かない。
+
+- [x] 案A / 案B の判断 → **どちらも不要**（パイプラインは正常）
+
+### 真の不具合: 鮮度ダッシュボードの構造的ドリフト
+
+`INDEX.md` は「MEMORY 最終更新 2026-07-08 🔴 クラウド認知パイプライン停止中（15日間更新なし）」と表示していたが、実際の `MEMORY.md` は `updated: 2026-07-23`。
+
+原因は `brain-compile.sh` が鮮度表の更新を LLM に自由記述で任せる一方、同じプロンプトで `MEMORY.md / DREAMS.md` への接触を禁止していたこと。**鮮度を報告する対象を読めない LLM が鮮度表を書いていた**ため、実データを見ずに前回値の日数を増やし続けていた（`.compile.log` に「MEMORY停滞日数を 13日 → 14日 に更新」の記録あり）。この誤報が Phase 3 の誤った前提そのものを生んだ。
+
+- [x] `platform.sh` に `date_epoch <YYYY-MM-DD>` を追加（GNU→BSD フォールバック）
+- [x] `refresh-index.sh` を新設。frontmatter から決定論的に鮮度表を生成
+- [x] `INDEX.md` テンプレに `<!-- FRESHNESS:START/END -->` マーカーを追加
+- [x] `brain-compile.sh` から鮮度表の責務を外し、commit 直前に `refresh-index.sh` を呼ぶ
+
+### 検証
+
+実 vault のコピーに対して実行し、誤報の解消を実証:
+
+| 対象 | 旧（LLM 記述） | 新（決定論生成） |
+|---|---|---|
+| MEMORY | 2026-07-08 🔴 15日間更新なし | 2026-07-23 🟢 2日前 |
+| DREAMS | （行なし） | 2026-07-19 🟢 6日前 |
+| open-loops | 2026-07-08 🟢 5件登録済み | 2026-07-08 🔴 17日前 |
+| 当日 daily | 2026-07-24 🟡 | 2026-07-25 存在 🟢 |
+
+open-loops が 🟢 から 🔴 に変わった点が重要。LLM は「5件の初期アクション登録済み」という**登録当時の評価**を貼り続けており、17日間放置されている事実を隠していた。
+
+- [x] マーカー不在の INDEX.md には書き込まず rc=1（誤爆防止）
+- [x] 冪等（2回実行で md5・mtime とも不変）
+- [x] CRLF / LF どちらの INDEX.md でも改行を維持（実 vault は LF、テンプレは CRLF）
+- [x] 実 vault には一切書き込んでいない
+
+### 実 vault 側の残作業（未実施・要判断）
+
+稼働中の `~/vault/INDEX.md` にはまだマーカーが無く、誤報が表示されたまま。マーカーを入れれば次回の夜間 compile から自動修正される。ただし INDEX.md は夜間 compile が所有するファイルのため、手を入れるかは要判断。
 
 ## Phase 4 — ドキュメント
 
