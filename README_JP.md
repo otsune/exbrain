@@ -170,6 +170,8 @@ INDEX.mdには全セクションの地図と**鮮度ダッシュボード**（co
 
 - Claude Code（Pro or Max） / Obsidian（無料） / GitHubアカウント
 - （オプション）Slack・Google Calendar・Gmail のConnector、常駐エージェント
+- **Windowsの場合**: Git for Windows（Git Bash）が必須。WSLのbashはSQLite等の依存が不足するため使用不可。`iconv`はGit Bash同梱のもので足りる
+- macOSの場合は追加インストール不要（標準のbashで動く）
 
 ### Step 1: Vault作成 + テンプレート展開
 
@@ -177,7 +179,7 @@ INDEX.mdには全セクションの地図と**鮮度ダッシュボード**（co
 git clone https://github.com/chaenmasahiro0425/exbrain.git /tmp/exbrain
 mkdir -p ~/vault && cp -r /tmp/exbrain/vault-template/* /tmp/exbrain/vault-template/.gitignore ~/vault/
 
-# iCloud同期（iPhone対応する場合）
+# iCloud同期（iPhone対応する場合。macOS専用オプション。Windowsでは不要）
 mv ~/vault ~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents/exbrain
 ln -s ~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents/exbrain ~/vault
 ```
@@ -221,13 +223,16 @@ entities/ clients/ insights/ を編纂して。全主張に出典リンクを付
 
 ### Step 5: ループを起動
 
+`setup-scheduler.sh`がbrain-compile（毎日23:30）・brain-pull（毎時）・brain-lint（日曜09:00）の3ジョブをOS標準のスケジューラ（macOS: launchd / Windows: schtasks）に登録する。macOSでもWindowsでも同じコマンドでよい。
+
 ```bash
-# launchd登録（プレースホルダを自分のユーザー名に置換してから）
-cp /tmp/exbrain/launchd/com.YOURNAME.brain-*.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.YOURNAME.brain-compile.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.YOURNAME.brain-lint.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.YOURNAME.brain-pull.plist
+bash ~/vault/scripts/setup-scheduler.sh --dry-run   # 登録内容を確認
+bash ~/vault/scripts/setup-scheduler.sh             # 実行
 ```
+
+冪等なので、既に同一内容で登録済みなら再実行しても何も変わらない。vaultのパスを`~/vault`以外にしている場合は環境変数`VAULT`で上書きする。
+
+> 手動で登録する場合（macOS）: `launchd/*.plist`のプレースホルダ（`YOURNAME`）を自分のユーザー名に置換し、`~/Library/LaunchAgents/`に配置して`launchctl bootstrap gui/$(id -u) <plistパス>`を叩く。`setup-scheduler.sh`はこの手順を自動化したもの。
 
 Cloud Scheduled Tasks（[claude.ai/code/scheduled](https://claude.ai/code/scheduled)）で朝夕のdaily note生成と週次Dreamingを登録すれば、PCを閉じても脳が動き続ける。
 
@@ -253,6 +258,7 @@ gh repo create my-vault --private --source=. --push
 |-----------|------|
 | `brain-compile.sh` | ★夜間コンパイラ: raw → wiki編纂（23:30） |
 | `brain-lint.sh` | ★週次lint: 腐敗検出（日曜09:00） |
+| `setup-scheduler.sh` | 定期ジョブ登録の単一エントリポイント（macOS: launchd / Windows: schtasks、冪等） |
 | `on-session-start.sh` | SessionStart hook: pull → healthcheck → primer注入 |
 | `session-primer.sh` | 「脳の状態」をセッション冒頭にコンテキスト注入 |
 | `on-session-end.sh` | Stop hook: daily雛形保証 + 同期 |
@@ -263,7 +269,7 @@ gh repo create my-vault --private --source=. --push
 | `sync-agent-to-vault.sh` | 外部エージェントのデータでdaily note充実化 |
 | `ios-clip-shortcut.md` | iPhoneの共有メニューからワンタップクリップ |
 
-全スクリプトmacOS互換（GNU拡張なし）。LLM実行部は権限を絞ったheadlessモード。
+全スクリプトmacOS / Windows(Git Bash)互換。OS差異は`scripts/lib/platform.sh`で吸収する。LLM実行部は権限を絞ったheadlessモード。
 
 ## 設計思想 — 参考文献
 

@@ -170,6 +170,8 @@ Verification is kept separate because **a checker on fresh context is stronger t
 
 - Claude Code (Pro or Max) / Obsidian (free) / a GitHub account
 - (Optional) Slack, Google Calendar, and Gmail Connectors; an always-on agent
+- **On Windows**: Git for Windows (Git Bash) is required. WSL's bash won't work — it's missing dependencies like SQLite. The `iconv` bundled with Git Bash is sufficient.
+- On macOS, nothing extra to install (the built-in bash works as-is).
 
 ### Step 1: Create the vault + expand the templates
 
@@ -177,7 +179,7 @@ Verification is kept separate because **a checker on fresh context is stronger t
 git clone https://github.com/chaenmasahiro0425/exbrain.git /tmp/exbrain
 mkdir -p ~/vault && cp -r /tmp/exbrain/vault-template/* /tmp/exbrain/vault-template/.gitignore ~/vault/
 
-# iCloud sync (if you want iPhone support)
+# iCloud sync (if you want iPhone support — macOS-only; not applicable on Windows)
 mv ~/vault ~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents/exbrain
 ln -s ~/Library/Mobile\ Documents/iCloud~md~obsidian/Documents/exbrain ~/vault
 ```
@@ -221,13 +223,16 @@ If there are dozens of files, knock it out in one shot with parallel subagents (
 
 ### Step 5: Start the loops
 
+`setup-scheduler.sh` registers all three jobs — brain-compile (daily 23:30), brain-pull (hourly), and brain-lint (Sunday 09:00) — with the OS's native scheduler (launchd on macOS, schtasks on Windows). Same command on both platforms.
+
 ```bash
-# Register with launchd (after replacing the placeholder with your own username)
-cp /tmp/exbrain/launchd/com.YOURNAME.brain-*.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.YOURNAME.brain-compile.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.YOURNAME.brain-lint.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.YOURNAME.brain-pull.plist
+bash ~/vault/scripts/setup-scheduler.sh --dry-run   # preview what would be registered
+bash ~/vault/scripts/setup-scheduler.sh             # run it
 ```
+
+It's idempotent: re-running it does nothing if the same jobs are already registered. Override the vault path with the `VAULT` environment variable if it's not `~/vault`.
+
+> Manual registration (macOS): replace the `YOURNAME` placeholder in `launchd/*.plist` with your own username, copy the files into `~/Library/LaunchAgents/`, and run `launchctl bootstrap gui/$(id -u) <plist path>` for each. `setup-scheduler.sh` automates exactly this.
 
 Register the morning/evening daily-note generation and the weekly Dreaming as Cloud Scheduled Tasks ([claude.ai/code/scheduled](https://claude.ai/code/scheduled)), and the brain keeps running even with your PC closed.
 
@@ -253,6 +258,7 @@ gh repo create my-vault --private --source=. --push
 |--------|---------|
 | `brain-compile.sh` | ★ The nightly compiler: raw → wiki compilation (23:30) |
 | `brain-lint.sh` | ★ Weekly lint: rot detection (Sunday 09:00) |
+| `setup-scheduler.sh` | Single entry point for registering scheduled jobs (macOS: launchd / Windows: schtasks, idempotent) |
 | `on-session-start.sh` | SessionStart hook: pull → healthcheck → primer injection |
 | `session-primer.sh` | Inject the "state of the brain" into context at the start of a session |
 | `on-session-end.sh` | Stop hook: guarantee the daily scaffold + sync |
@@ -263,7 +269,7 @@ gh repo create my-vault --private --source=. --push
 | `sync-agent-to-vault.sh` | Enrich daily notes with data from external agents |
 | `ios-clip-shortcut.md` | One-tap clipping from the iPhone share menu |
 
-All scripts are macOS-compatible (no GNU extensions). The LLM-execution parts run in headless mode with tightly scoped permissions.
+All scripts work on both macOS and Windows (Git Bash); OS differences are absorbed by `scripts/lib/platform.sh`. The LLM-execution parts run in headless mode with tightly scoped permissions.
 
 ## Design Philosophy — References
 
