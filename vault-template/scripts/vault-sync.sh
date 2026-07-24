@@ -7,6 +7,9 @@
 #   - 競合は「本物の content 競合」だけ検知 → abort して通知（既存データを絶対に壊さない / data-repair-safety）
 set +e
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
+
 VAULT="$HOME/vault"
 LOG="$VAULT/.sync.log"
 LOCK="$VAULT/.git-sync.lock"
@@ -46,7 +49,7 @@ if echo "$out" | grep -qiE 'CONFLICT|Merge conflict|needs merge|unmerged'; then
   if [ -n "$(git diff --name-only --diff-filter=U 2>/dev/null)" ] || [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
     git rebase --abort 2>/dev/null
     log "REBASE CONFLICT — aborted（非daily or 解決不能）, 手動確認が必要"
-    osascript -e 'display notification "vault同期に競合。手動確認が必要です" with title "exbrain ⚠️" sound name "Basso"' 2>/dev/null
+    notify "exbrain ⚠️" "vault同期に競合。手動確認が必要です"
   else
     log "auto-resolved daily conflict（cloud版採用, ${tries}step）"
   fi

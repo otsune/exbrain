@@ -3,6 +3,8 @@
 # launchd: com.YOURNAME.brain-lint（毎週日曜09:00）。旧 weekly-sync.sh の後継。
 # 検出: 壊れwikilink / iCloud競合コピー / byte-identical重複 / 陳腐化 / 期限切れresearch / daily欠落 / frontmatter欠落
 set +e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
 VAULT="$HOME/vault"
 REPORT="$VAULT/system/lint-report.md"
 cd "$VAULT" 2>/dev/null || exit 0
@@ -99,7 +101,7 @@ PYEOF
 
 # RED（壊れリンク・競合コピーあり）ならローカル通知
 total=$(python3 -c "import json;d=json.load(open('$VAULT/system/.lint-latest.json'));print(d['counts']['broken_links']+d['counts']['conflict_copies'])" 2>/dev/null || echo 0)
-[ "${total:-0}" -gt 0 ] && osascript -e "display notification \"lint: 要対応 ${total}件（system/lint-report.md）\" with title \"exbrain lint 🔴\"" 2>/dev/null
+[ "${total:-0}" -gt 0 ] && notify "exbrain lint 🔴" "lint: 要対応 ${total}件（system/lint-report.md）"
 
 # コミット（レポートのみ）
 if [ -n "$(git status --porcelain -- system/ 2>/dev/null)" ]; then
