@@ -67,12 +67,13 @@ for DATE in $dates; do
 4. 意思決定（金額・契約・方針・人事）があれば ~/vault/decisions/$MONTH.md に追記（無ければ作成）
 5. ~/vault/open-loops.md を更新: 新規の未解決事項を追加、完了が確認できた項目は [x] にして '## Closed' へ移動（出典付き）
 6. 明確に繰り返しが確認できた新パターンのみ ~/vault/insights/ に1ファイル1教訓で追加（乱造禁止。確信が持てない場合は作らない）
-7. ~/vault/INDEX.md の鮮度ダッシュボードと updated: を更新
+7. ~/vault/INDEX.md の updated: を更新
 8. clients/_index.md・entities/_index.md に新規ページのリンクを追加
 
 制約:
 - raw層（daily/ clips/ raw/）は読み取り専用。書き換え禁止
 - MEMORY.md / DREAMS.md / SOUL.md / VOICE.md / RED-LINES.md / system/ / skills/ / memory/ に触れない
+- INDEX.md の鮮度ダッシュボード（<!-- FRESHNESS:START/END -->）はrefresh-index.shが生成する。触らない
 - 出典のない主張を書かない。報告前に各変更をツール結果と突き合わせ、実際に書いた変更だけを報告する
 
 当日の新規クリップ:
@@ -88,6 +89,9 @@ $NEW_CLIPS
     >> "$LOG" 2>&1
   rc=$?
   log "$DATE: done rc=$rc"
+
+  # 鮮度ダッシュボードを決定論的に再生成（LLMは触らない。失敗してもcompile全体は落とさない）
+  bash "$VAULT/scripts/refresh-index.sh" || log "$DATE: refresh-index failed rc=$?"
 
   # wiki層のみコミット（raw層に触れていたら異常なので何もしない安全弁）
   changed=$(git status --porcelain -- daily/ clips/ raw/ MEMORY.md DREAMS.md SOUL.md VOICE.md RED-LINES.md 2>/dev/null | wc -l | tr -d ' ')
