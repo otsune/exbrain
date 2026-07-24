@@ -1,0 +1,8 @@
+# Windows で clone しても改行が CRLF に変換されないようにする。
+# Git Bash は CRLF のシェルスクリプトを実行できず `$'\r': command not found` で落ちるため、
+# 実行されるファイルは必ず LF に固定する。
+*.sh    text eol=lf
+*.plist text eol=lf
+
+# ドキュメント・雛形はプラットフォーム既定に任せる
+*.md    text
