@@ -4,6 +4,8 @@
 # launchd: com.YOURNAME.brain-compile（毎日23:30）。安価モデル（haiku）で実行 = 「routine work, routine tier」。
 # 設計: LLMはRead/Write/Edit/Glob/Grepのみ。git操作はこのスクリプトが行う（暴走防止）。
 set +e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
 VAULT="$HOME/vault"
 LOG="$VAULT/.compile.log"
 STATE="$VAULT/scripts/.compile-state"
@@ -25,7 +27,8 @@ echo $$ > "$LOCK"; trap 'rm -f "$LOCK"' EXIT
 CLAUDE=""
 for c in "$(command -v claude 2>/dev/null)" \
          "$HOME/.local/bin/claude" "/opt/homebrew/bin/claude" \
-         "/Applications/cmux.app/Contents/Resources/bin/claude"; do
+         "/Applications/cmux.app/Contents/Resources/bin/claude" \
+         "$LOCALAPPDATA/Programs/claude/claude.exe" "$PROGRAMFILES/Claude/claude.exe"; do
   [ -n "$c" ] && [ -x "$c" ] && CLAUDE="$c" && break
 done
 [ -z "$CLAUDE" ] && { log "ERROR: claude CLI not found"; exit 1; }
@@ -33,11 +36,11 @@ done
 # 未コンパイル日を列挙（前回状態〜今日、最大3日分）
 today=$(date +%F)
 last=$(cat "$STATE" 2>/dev/null)
-[ -z "$last" ] && last=$(date -v-1d +%F)
+[ -z "$last" ] && last=$(date_offset today -1)
 dates=""
 d="$last"; n=0
 while [ "$d" != "$today" ] && [ $n -lt 3 ]; do
-  d=$(date -j -f %F -v+1d "$d" +%F 2>/dev/null) || break
+  d=$(date_offset "$d" 1) || break
   dates="$dates $d"; n=$((n+1))
 done
 [ -z "$dates" ] && { log "up to date ($last)"; exit 0; }
