@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # platform.sh — OS差異を吸収する共通ヘルパ（macOS / Windows(Git Bash) / Linux）
 # source されて使われるライブラリのため set -e は入れない。
-# 提供関数: os_kind / date_offset / notify / win_path
+# 提供関数: os_kind / date_offset / date_epoch / notify / win_path
 
 # os_kind — 実行OSを macos / windows / linux のいずれかでecho
 os_kind() {
@@ -35,6 +35,20 @@ date_offset() {
     out=$(date -d "$base $days days" +%F 2>/dev/null)
     [ -z "$out" ] && out=$(date -j -f %F -v${sign}d "$base" +%F 2>/dev/null)
   fi
+
+  if [ -n "$out" ]; then
+    echo "$out"
+    return 0
+  fi
+  return 1
+}
+
+# date_epoch <YYYY-MM-DD> — その日の epoch 秒をecho。失敗時は何も出さず rc=1
+# GNU date (date -d) を先に試し、失敗したら BSD date (date -j -f) にフォールバック
+date_epoch() {
+  d="$1"
+  out=$(date -d "$d" +%s 2>/dev/null)
+  [ -z "$out" ] && out=$(date -j -f %Y-%m-%d "$d" +%s 2>/dev/null)
 
   if [ -n "$out" ]; then
     echo "$out"
