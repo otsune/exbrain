@@ -3,6 +3,8 @@
 # SessionStart hook から起動（FDAコンテキスト）。安全な範囲だけ自動修復。
 # これが「2ヶ月サイレント故障に気づけなかった」再発を防ぐメタ層。
 set +e
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+. "$SCRIPT_DIR/lib/platform.sh"
 VAULT="$HOME/vault"; cd "$VAULT" 2>/dev/null || exit 0
 DASH="$VAULT/system/health-dashboard.md"
 JSON="$VAULT/system/.health-latest.json"
@@ -11,6 +13,17 @@ mkdir -p "$VAULT/system"
 reds=0; yellows=0; rows=""
 add(){ rows="${rows}| $1 | $2 | $3 |
 "; [ "$2" = "🔴" ] && reds=$((reds+1)); [ "$2" = "🟡" ] && yellows=$((yellows+1)); return 0; }
+
+# git接続（.git欠落やorigin未設定だと以降のgit系プローブが全て偽陽性🟢になるため最初に検査。2026-07-08の実障害で追加）
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  add "git接続" "🔴" "vaultがgitリポジトリではない（同期系が全停止）"
+elif ! git remote get-url origin >/dev/null 2>&1; then
+  add "git接続" "🔴" "origin未設定（クラウド同期不可）"
+elif ! git rev-parse --verify -q origin/main >/dev/null 2>&1; then
+  add "git接続" "🟡" "origin/main未取得（初回push/fetch待ち）"
+else
+  add "git接続" "🟢" "origin/main接続済み"
+fi
 
 # 直近 pull が走っている前提（SessionStart で --pull-only 実行済み）。ここでは fetch しない＝軽量。
 behind=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo 0)
@@ -38,11 +51,22 @@ fi
 
 # MEMORY 鮮度（クラウド認知が生きているか）
 mupd=$(grep -m1 '^updated:' MEMORY.md 2>/dev/null | awk '{print $2}')
-if [ -n "$mupd" ] && [ "$mupd" \> "$(date -v-3d +%F 2>/dev/null)" ]; then add "MEMORY鮮度" "🟢" "updated:$mupd"; else add "MEMORY鮮度" "🟡" "updated:${mupd:-?}（クラウド認知の停止疑い）"; fi
+cut3=$(date_offset today -3)  # 失敗すると空になり比較が常に真＝偽陽性🟢になるため -n チェックを挟む
+if [ -n "$mupd" ] && [ -n "$cut3" ] && [ "$mupd" \> "$cut3" ]; then add "MEMORY鮮度" "🟢" "updated:$mupd"; else add "MEMORY鮮度" "🟡" "updated:${mupd:-?}（クラウド認知の停止疑い）"; fi
 
-# launchd 異常終了ジョブ
-fails=$(launchctl list 2>/dev/null | awk '$1!="-" && $2!=0 && /com\.YOURNAME/{print $3"="$2}' | tr '\n' ' ')
-[ -n "$fails" ] && add "launchdジョブ異常" "🟡" "$fails" || add "launchdジョブ" "🟢" "正常"
+# 定期ジョブ（macOS: launchd / Windows: タスクスケジューラ brain-compile・brain-pull・brain-lint）
+if command -v launchctl >/dev/null 2>&1; then
+  fails=$(launchctl list 2>/dev/null | awk '$1!="-" && $2!=0 && /com\.YOURNAME/{print $3"="$2}' | tr '\n' ' ')
+  [ -n "$fails" ] && add "launchdジョブ異常" "🟡" "$fails" || add "launchdジョブ" "🟢" "正常"
+elif command -v schtasks.exe >/dev/null 2>&1; then
+  missing=""
+  for t in brain-compile brain-pull brain-lint; do
+    MSYS_NO_PATHCONV=1 schtasks.exe /query /tn "\\$t" >/dev/null 2>&1 || missing="${missing}${t} "
+  done
+  [ -n "$missing" ] && add "定期ジョブ" "🟡" "未登録: $missing" || add "定期ジョブ" "🟢" "正常（schtasks）"
+else
+  add "定期ジョブ" "🟡" "スケジューラ未検出"
+fi
 
 verdict="🟢 all green"
 [ $yellows -gt 0 ] && verdict="🟡 ${yellows} warnings"
@@ -60,7 +84,7 @@ verdict="🟢 all green"
 printf '{"ts":"%s","verdict":"%s","reds":%d,"yellows":%d}\n' "$(date '+%F %T')" "$verdict" "$reds" "$yellows" > "$JSON"
 
 # RED時のみ通知（朝夕Slack上限ポリシーに非干渉＝OSローカル通知のみ）
-[ $reds -gt 0 ] && osascript -e "display notification \"exbrain健全性: ${reds}件のcritical\" with title \"vault health 🔴\" sound name \"Basso\"" 2>/dev/null
+[ $reds -gt 0 ] && notify "vault health 🔴" "exbrain健全性: ${reds}件のcritical"
 
 # 安全な自動修復: 競合が無くバックログがあれば commit+push（破壊しない範囲のみ）
 if [ "${dirty:-0}" -gt 0 ] && [ "${uu:-0}" -eq 0 ]; then
