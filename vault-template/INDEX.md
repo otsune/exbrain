@@ -34,9 +34,11 @@ updated: {{date}}
 
 ## 鮮度ダッシュボード
 
-<!-- brain-compile.sh が毎晩更新 -->
+<!-- FRESHNESS:START -->
+<!-- refresh-index.sh が生成（手で編集しない） -->
 | 対象 | 最終更新 | 状態 |
 |------|---------|------|
+<!-- FRESHNESS:END -->
 
 ## 健全性
 
