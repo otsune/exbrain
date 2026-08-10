@@ -6,8 +6,8 @@ weekday: {{weekday}}
 ## Schedule
 <!-- morning-briefing が自動記入 -->
 
-## Log
-<!-- Claude Code hooks が自動追記 -->
+## Sessions
+<!-- エージェントのセッション記録(Claude / Codex)が追記される -->
 <!-- 手動で書き足してもOK -->
 
 ## Thoughts
